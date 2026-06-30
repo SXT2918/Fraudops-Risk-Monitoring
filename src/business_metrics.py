@@ -30,6 +30,7 @@ def calculate_business_metrics(
             "flagged_transactions": 0,
             "fraud_cases_caught": 0,
             "false_alarms": 0,
+            "false_negatives": 0,
             "estimated_prevented_loss": 0.0,
             "review_rate": 0.0,
             "precision": 0.0,
@@ -41,6 +42,7 @@ def calculate_business_metrics(
 
     true_positives = int((flagged & fraud).sum())
     false_positives = int((flagged & ~fraud).sum())
+    false_negatives = int((~flagged & fraud).sum())
     total_fraud = int(fraud.sum())
 
     precision = true_positives / max(true_positives + false_positives, 1)
@@ -52,6 +54,7 @@ def calculate_business_metrics(
         "flagged_transactions": int(flagged.sum()),
         "fraud_cases_caught": true_positives,
         "false_alarms": false_positives,
+        "false_negatives": false_negatives,
         "estimated_prevented_loss": round(prevented_loss, 2),
         "review_rate": round(float(flagged.mean()), 4),
         "precision": round(precision, 4),

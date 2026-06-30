@@ -22,6 +22,7 @@ DATABASE_PATH = BASE_DIR / "fraudops.sqlite3"
 
 MODEL_PATH = MODELS_DIR / "fraud_model.pkl"
 FEATURE_COLUMNS_PATH = MODELS_DIR / "feature_columns.json"
+MODEL_METRICS_PATH = MODELS_DIR / "model_metrics.json"
 
 # Schema expected from the raw transaction source.
 REQUIRED_COLUMNS = [
@@ -38,6 +39,12 @@ REQUIRED_COLUMNS = [
 LOW_RISK_MAX = 0.30
 HIGH_RISK_MIN = 0.70
 DEFAULT_DECISION_THRESHOLD = HIGH_RISK_MIN
+MODEL_EVALUATION_THRESHOLD = 0.50
+
+# Reproducible model evaluation settings.
+RANDOM_STATE = 42
+TEST_SIZE = 0.30
+THRESHOLD_COMPARISON_VALUES = [0.10, 0.20, 0.30, 0.50, 0.70]
 
 # Simple assumption for business impact reporting.
 # True-positive fraud caught => prevented loss equals transaction amount.

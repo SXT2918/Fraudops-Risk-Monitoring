@@ -18,6 +18,7 @@ def test_calculate_business_metrics():
     assert metrics["flagged_transactions"] == 2
     assert metrics["fraud_cases_caught"] == 1
     assert metrics["false_alarms"] == 1
+    assert metrics["false_negatives"] == 1
     assert metrics["estimated_prevented_loss"] == 100.0
     assert metrics["precision"] == 0.5
     assert metrics["recall"] == 0.5

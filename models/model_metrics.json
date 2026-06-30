@@ -1,0 +1,62 @@
+{
+  "best_model": "logistic_regression",
+  "selection_rule": "Highest PR-AUC, then recall, precision, and F1.",
+  "evaluation_threshold": 0.5,
+  "test_size": 0.3,
+  "random_state": 42,
+  "train_rows": 21,
+  "test_rows": 9,
+  "feature_count": 28,
+  "test_transaction_ids": [
+    "txn_0019",
+    "txn_0018",
+    "txn_0004",
+    "txn_0011",
+    "txn_0013",
+    "txn_0014",
+    "txn_0012",
+    "txn_0021",
+    "txn_0025"
+  ],
+  "models": {
+    "logistic_regression": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "roc_auc": 1.0,
+      "pr_auc": 1.0,
+      "confusion_matrix": {
+        "true_negatives": 5,
+        "false_positives": 0,
+        "false_negatives": 0,
+        "true_positives": 4
+      }
+    },
+    "random_forest": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "roc_auc": 1.0,
+      "pr_auc": 1.0,
+      "confusion_matrix": {
+        "true_negatives": 5,
+        "false_positives": 0,
+        "false_negatives": 0,
+        "true_positives": 4
+      }
+    },
+    "xgboost": {
+      "precision": 0.8,
+      "recall": 1.0,
+      "f1": 0.8889,
+      "roc_auc": 1.0,
+      "pr_auc": 1.0,
+      "confusion_matrix": {
+        "true_negatives": 4,
+        "false_positives": 1,
+        "false_negatives": 0,
+        "true_positives": 4
+      }
+    }
+  }
+}

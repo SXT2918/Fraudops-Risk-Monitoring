@@ -1,0 +1,7 @@
+services:
+  fraudops:
+    build: .
+    container_name: fraudops
+    volumes:
+      - .:/app
+    command: python -m src.ingestion

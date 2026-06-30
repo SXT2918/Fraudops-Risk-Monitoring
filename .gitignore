@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables
+.env
+
+# Local data / database outputs
+*.db
+*.sqlite
+*.sqlite3
+data/raw/*.csv
+!data/raw/.gitkeep
+data/processed/*.csv
+!data/processed/.gitkeep
+models/*.pkl
+models/*.joblib
+!models/.gitkeep
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -79,6 +79,31 @@ def fetch_transactions(db_path: Path = DATABASE_PATH) -> pd.DataFrame:
         return pd.read_sql_query("SELECT * FROM transactions", conn)
 
 
+def fetch_scored_transactions(db_path: Path = DATABASE_PATH) -> pd.DataFrame:
+    """Read scored transactions with optional transaction context."""
+    initialize_database(db_path)
+    with get_connection(db_path) as conn:
+        return pd.read_sql_query(
+            """
+            SELECT
+                s.transaction_id,
+                s.fraud_probability,
+                s.risk_tier,
+                s.decision,
+                s.scored_at,
+                t.amount,
+                t.merchant_category,
+                t.location,
+                t.transaction_time
+            FROM scored_transactions AS s
+            LEFT JOIN transactions AS t
+                ON s.transaction_id = t.transaction_id
+            ORDER BY s.scored_at DESC, s.fraud_probability DESC;
+            """,
+            conn,
+        )
+
+
 def insert_scored_transactions(
     df: pd.DataFrame,
     db_path: Path = DATABASE_PATH,

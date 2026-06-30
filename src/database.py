@@ -8,6 +8,7 @@ Later this layer can be swapped for PostgreSQL.
 from __future__ import annotations
 
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -76,3 +77,53 @@ def fetch_transactions(db_path: Path = DATABASE_PATH) -> pd.DataFrame:
     initialize_database(db_path)
     with get_connection(db_path) as conn:
         return pd.read_sql_query("SELECT * FROM transactions", conn)
+
+
+def insert_scored_transactions(
+    df: pd.DataFrame,
+    db_path: Path = DATABASE_PATH,
+) -> int:
+    """Insert or replace scored transaction decisions in SQLite.
+
+    Args:
+        df: Scored transactions with transaction_id, fraud_probability,
+            risk_tier, and decision columns.
+        db_path: SQLite database path.
+
+    Returns:
+        Number of scored rows written.
+    """
+    required_columns = ["transaction_id", "fraud_probability", "risk_tier", "decision"]
+    missing = [col for col in required_columns if col not in df.columns]
+    if missing:
+        raise ValueError(f"Missing scored transaction column(s): {', '.join(missing)}")
+
+    initialize_database(db_path)
+    scored_at = datetime.now(UTC).isoformat()
+    records = [
+        (
+            str(row.transaction_id),
+            float(row.fraud_probability),
+            str(row.risk_tier),
+            str(row.decision),
+            scored_at,
+        )
+        for row in df[required_columns].itertuples(index=False)
+    ]
+
+    with get_connection(db_path) as conn:
+        conn.executemany(
+            """
+            INSERT OR REPLACE INTO scored_transactions (
+                transaction_id,
+                fraud_probability,
+                risk_tier,
+                decision,
+                scored_at
+            )
+            VALUES (?, ?, ?, ?, ?);
+            """,
+            records,
+        )
+        conn.commit()
+    return len(records)

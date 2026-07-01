@@ -57,8 +57,14 @@ def test_score_transaction_returns_scored_result(monkeypatch):
 
 
 def test_score_batch_returns_multiple_scored_results(monkeypatch):
+    inserted_counts = []
+
+    def capture_insert(scores: pd.DataFrame) -> int:
+        inserted_counts.append(len(scores))
+        return len(scores)
+
     monkeypatch.setattr("api.main.score_transactions", fake_scores)
-    monkeypatch.setattr("api.main.insert_scored_transactions", lambda _scores: 2)
+    monkeypatch.setattr("api.main.insert_scored_transactions", capture_insert)
 
     response = client.post(
         "/score_batch",
@@ -71,6 +77,7 @@ def test_score_batch_returns_multiple_scored_results(monkeypatch):
     assert results[0]["transaction_id"] == "txn_001"
     assert results[1]["transaction_id"] == "txn_002"
     assert results[1]["risk_tier"] == "Low"
+    assert inserted_counts == [2]
 
 
 def test_score_transaction_missing_required_field_returns_validation_error():

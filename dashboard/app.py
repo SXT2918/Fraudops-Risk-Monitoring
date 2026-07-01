@@ -26,6 +26,7 @@ SETUP_COMMANDS = """
 python -m src.ingestion
 python -m src.train_model
 python -m src.evaluate_model
+python -m src.seed_scores
 uvicorn api.main:app --reload
 ```
 """
@@ -65,7 +66,10 @@ def load_model_metrics() -> dict[str, Any]:
     """Load saved model metrics from JSON when available."""
     if not MODEL_METRICS_PATH.exists():
         return {}
-    return json.loads(MODEL_METRICS_PATH.read_text(encoding="utf-8"))
+    try:
+        return json.loads(MODEL_METRICS_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
 
 
 @st.cache_data
@@ -207,10 +211,11 @@ def render_risk_monitoring(scored: pd.DataFrame) -> None:
         st.info("No scored transactions are available yet.")
         st.markdown(
             """
-            Generate scored rows by running the API and calling `/score_transaction`
-            or `/score_batch`.
+            Generate scored rows by running the seed command, or run the API and
+            call `/score_transaction` or `/score_batch`.
 
             ```powershell
+            python -m src.seed_scores
             uvicorn api.main:app --reload
             ```
             """

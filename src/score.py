@@ -20,6 +20,11 @@ from src.config import (
 )
 from src.features import build_features
 
+MODEL_SETUP_COMMANDS = (
+    "Run `python -m src.ingestion` and then `python -m src.train_model` "
+    "from the project root."
+)
+
 
 def probability_to_risk_tier(probability: float) -> str:
     """Convert a fraud probability into a business-friendly risk tier."""
@@ -46,7 +51,7 @@ def load_model(model_path: Path = MODEL_PATH) -> Any:
     if not model_path.exists():
         raise FileNotFoundError(
             f"No trained fraud model found at {model_path}. "
-            "Run `python -m src.train_model` first."
+            f"{MODEL_SETUP_COMMANDS}"
         )
     return joblib.load(model_path)
 
@@ -57,7 +62,7 @@ def load_feature_columns(feature_columns_path: Path = FEATURE_COLUMNS_PATH) -> l
     if not feature_columns_path.exists():
         raise FileNotFoundError(
             f"No feature column file found at {feature_columns_path}. "
-            "Run `python -m src.train_model` first."
+            f"{MODEL_SETUP_COMMANDS}"
         )
 
     columns = json.loads(feature_columns_path.read_text(encoding="utf-8"))

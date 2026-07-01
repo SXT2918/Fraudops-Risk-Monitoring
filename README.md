@@ -73,6 +73,50 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
+---
+
+## Common commands
+
+### Windows PowerShell
+
+Run these from the project root after activating `.venv`:
+
+```powershell
+pip install -r requirements.txt
+python -m src.ingestion
+python -m src.train_model
+python -m src.evaluate_model
+python -m src.seed_scores
+uvicorn api.main:app --reload
+streamlit run dashboard/app.py
+pytest
+```
+
+The API runs locally at:
+
+```text
+http://127.0.0.1:8000
+```
+
+The dashboard runs locally at:
+
+```text
+http://127.0.0.1:8501
+```
+
+If you have `make` installed, these shortcuts are also available:
+
+```bash
+make install
+make ingest
+make train
+make evaluate
+make seed-scores
+make api
+make dashboard
+make test
+```
+
 ### macOS / Linux
 
 ```bash
@@ -114,7 +158,7 @@ pytest
 
 ## Current status
 
-Completed in Step 1:
+Completed:
 
 - project skeleton
 - configuration file
@@ -125,15 +169,21 @@ Completed in Step 1:
 - feature engineering starter
 - business metric calculation
 - risk-tier mapping
+- model training and evaluation
+- saved model artifacts
+- FastAPI scoring endpoint
+- scored transaction database storage
+- Streamlit dashboard
+- seed scoring command for demo rows
 - pytest tests
 
 Next steps:
 
-1. train Logistic Regression, Random Forest, and XGBoost models,
-2. tune fraud probability thresholds,
-3. save best model and feature column order,
-4. build FastAPI scoring endpoint,
-5. build Streamlit dashboard,
+1. add a larger public dataset,
+2. add PostgreSQL and Docker Compose services,
+3. add model drift monitoring,
+4. add authentication,
+5. deploy the API and dashboard,
 6. add screenshots and architecture diagram.
 
 ---

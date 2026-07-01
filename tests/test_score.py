@@ -5,10 +5,13 @@ import pandas as pd
 
 from src.score import (
     align_feature_columns,
+    load_feature_columns,
+    load_model,
     probability_to_risk_tier,
     risk_tier_to_decision,
     score_transactions,
 )
+from src.train_model import train_models
 
 
 class FakeFraudModel:
@@ -91,3 +94,86 @@ def test_score_transactions_uses_saved_feature_column_order(monkeypatch, tmp_pat
     ]
     assert scores.loc[0, "risk_tier"] == "High"
     assert scores.loc[0, "decision"] == "Manual Review"
+
+
+def test_score_transactions_handles_realistic_transaction(tmp_path):
+    clean_data_path = tmp_path / "clean_transactions.csv"
+    model_path = tmp_path / "models" / "fraud_model.pkl"
+    feature_columns_path = tmp_path / "models" / "feature_columns.json"
+    metrics_path = tmp_path / "models" / "model_metrics.json"
+
+    rows = []
+    for index in range(12):
+        is_fraud = int(index % 2 == 0)
+        rows.append(
+            {
+                "transaction_id": f"txn_{index:03d}",
+                "user_id": f"user_{index // 2:03d}",
+                "amount": 0.75 if is_fraud else 42.0 + index,
+                "merchant_category": "online_services" if is_fraud else "grocery",
+                "transaction_time": (
+                    f"2026-01-{(index % 9) + 1:02d} "
+                    f"{'03' if is_fraud else '14'}:00:00"
+                ),
+                "location": "Toronto" if is_fraud else "Vancouver",
+                "is_fraud": is_fraud,
+            }
+        )
+    pd.DataFrame(rows).to_csv(clean_data_path, index=False)
+    train_models(
+        clean_data_path=clean_data_path,
+        model_path=model_path,
+        feature_columns_path=feature_columns_path,
+        metrics_path=metrics_path,
+        include_xgboost=False,
+    )
+
+    transaction = pd.DataFrame(
+        {
+            "transaction_id": ["txn_live"],
+            "user_id": ["user_live"],
+            "amount": [0.82],
+            "merchant_category": ["online_services"],
+            "transaction_time": ["2026-01-15T03:24:00"],
+            "location": ["Toronto"],
+        }
+    )
+
+    scores = score_transactions(
+        transaction,
+        model_path=model_path,
+        feature_columns_path=feature_columns_path,
+    )
+
+    assert scores.loc[0, "transaction_id"] == "txn_live"
+    assert 0 <= scores.loc[0, "fraud_probability"] <= 1
+    assert scores.loc[0, "risk_tier"] in {"Low", "Medium", "High"}
+    assert scores.loc[0, "decision"] in {"Approve", "Monitor", "Manual Review"}
+
+
+def test_missing_model_artifact_message_is_beginner_friendly(tmp_path):
+    missing_model_path = tmp_path / "missing_model.pkl"
+
+    try:
+        load_model(missing_model_path)
+    except FileNotFoundError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("Expected load_model to raise FileNotFoundError")
+
+    assert "python -m src.ingestion" in message
+    assert "python -m src.train_model" in message
+
+
+def test_missing_feature_columns_message_is_beginner_friendly(tmp_path):
+    missing_columns_path = tmp_path / "missing_feature_columns.json"
+
+    try:
+        load_feature_columns(missing_columns_path)
+    except FileNotFoundError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("Expected load_feature_columns to raise FileNotFoundError")
+
+    assert "python -m src.ingestion" in message
+    assert "python -m src.train_model" in message

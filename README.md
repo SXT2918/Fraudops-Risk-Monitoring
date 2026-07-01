@@ -1,69 +1,104 @@
 # FraudOps — Transaction Risk Monitoring Platform
 
-FraudOps is a portfolio project for data analytics, risk analytics, data engineering, analytics engineering, and ML-adjacent internships.
+An end-to-end fraud analytics platform that ingests transaction data, trains fraud detection models, exposes real-time scoring through FastAPI, and visualizes risk monitoring through Streamlit.
 
-The project will become an end-to-end fraud monitoring system that can:
+## Project Status
 
-1. ingest transaction data,
-2. validate and clean it,
-3. store it in a relational database,
-4. engineer fraud-risk features,
-5. train and evaluate fraud detection models,
-6. score transactions with risk tiers,
-7. expose a FastAPI scoring endpoint,
-8. display fraud patterns and business impact in a Streamlit dashboard.
+Portfolio-ready local build with ingestion, validation, SQLite storage, feature engineering, model training/evaluation, API scoring, dashboard monitoring, seed scoring, and automated tests.
 
-This starter version includes the project skeleton, sample data, ingestion, validation, feature engineering, simple business metrics, risk-tier logic, and tests.
+Current metrics are based on starter/sample data and are intended to validate the system pipeline, not claim production-grade fraud performance.
 
----
+## Business Problem
 
-## Why this project matters
+Fraud detection is not just an accuracy problem. Real fraud datasets are usually imbalanced, meaning the model can look accurate while missing rare but costly fraud cases. Risk teams also care about false positives because every flagged transaction can create manual review burden, customer friction, and operational cost.
 
-A notebook-only ML project shows that you can train a model. A platform-style project shows that you can build something closer to a real business workflow.
+FraudOps frames model performance around precision, recall, threshold tradeoffs, review volume, false positives, false negatives, and estimated prevented loss. This makes the project closer to a real fraud operations workflow than a notebook-only classifier.
 
-FraudOps is designed to demonstrate:
+## Key Features
 
-- Python programming
-- SQL / relational data storage
-- ETL pipeline design
-- data validation
-- feature engineering
-- fraud/risk analytics
-- model-readiness
-- business-impact thinking
-- testing and maintainability
+- CSV ingestion and schema validation
+- SQLite data storage for clean and scored transactions
+- Feature engineering for transaction time, amount, user behavior, merchant risk, and categorical signals
+- Model training and evaluation for Logistic Regression, Random Forest, and optional XGBoost
+- Threshold comparison with precision, recall, false positives, false negatives, review volume, and estimated prevented loss
+- FastAPI scoring endpoints for single transactions and batches
+- Streamlit dashboard for risk monitoring, fraud patterns, model performance, and project context
+- Seed scoring script to populate dashboard demo rows
+- Automated pytest suite
+- Makefile workflow for common local commands
 
----
+## Architecture
 
-## Project structure
+```mermaid
+flowchart LR
+    A[CSV Transactions] --> B[Validation & Cleaning]
+    B --> C[SQLite Database]
+    C --> D[Feature Engineering]
+    D --> E[Model Training & Evaluation]
+    E --> F[Model Artifacts]
+    F --> G[FastAPI Scoring API]
+    G --> H[Scored Transactions Table]
+    H --> I[Streamlit Dashboard]
+```
+
+Flow:
+
+```text
+CSV data → validation → SQLite → feature engineering → model training → saved artifacts → FastAPI scoring → scored transaction database → Streamlit dashboard
+```
+
+See [assets/architecture.md](assets/architecture.md) for a standalone copy of the Mermaid diagram.
+
+## Tech Stack
+
+- Python
+- pandas
+- NumPy
+- scikit-learn
+- XGBoost
+- SQLite
+- FastAPI
+- Streamlit
+- pytest
+- Plotly
+- joblib
+
+## Folder Structure
 
 ```text
 fraudops-risk-monitoring/
-├── data/
-│   ├── raw/
-│   ├── processed/
-│   └── sample/
-├── models/
-├── notebooks/
-├── src/
-│   ├── config.py
-│   ├── database.py
-│   ├── ingestion.py
-│   ├── validation.py
-│   ├── features.py
-│   ├── score.py
-│   └── business_metrics.py
 ├── api/
-├── dashboard/
-├── tests/
+│   └── main.py                 # FastAPI scoring service
 ├── assets/
+│   ├── architecture.md         # Mermaid architecture diagram
+│   └── screenshots/README.md   # Screenshot capture checklist
+├── dashboard/
+│   └── app.py                  # Streamlit dashboard
+├── data/
+│   ├── raw/                    # Optional user-provided raw data
+│   ├── processed/              # Generated clean CSV output
+│   └── sample/                 # Starter sample transactions
+├── models/
+│   ├── feature_columns.json    # Saved model feature order
+│   └── model_metrics.json      # Saved evaluation metrics
+├── src/
+│   ├── business_metrics.py     # Fraud operations metrics
+│   ├── config.py               # Shared paths and constants
+│   ├── database.py             # SQLite read/write helpers
+│   ├── evaluate_model.py       # Saved-model evaluation script
+│   ├── features.py             # Feature engineering
+│   ├── ingestion.py            # CSV ingestion pipeline
+│   ├── score.py                # Model scoring utilities
+│   ├── seed_scores.py          # Demo scored-row seeding
+│   ├── train_model.py          # Model training pipeline
+│   └── validation.py           # Data validation and cleaning
+├── tests/                      # pytest coverage
+├── Makefile                    # Optional command shortcuts
 ├── requirements.txt
 └── README.md
 ```
 
----
-
-## Setup
+## Quickstart
 
 ### Windows PowerShell
 
@@ -71,40 +106,41 @@ fraudops-risk-monitoring/
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-```
 
----
-
-## Common commands
-
-### Windows PowerShell
-
-Run these from the project root after activating `.venv`:
-
-```powershell
-pip install -r requirements.txt
 python -m src.ingestion
 python -m src.train_model
 python -m src.evaluate_model
 python -m src.seed_scores
-uvicorn api.main:app --reload
-streamlit run dashboard/app.py
 pytest
 ```
 
-The API runs locally at:
+Start the API:
 
-```text
-http://127.0.0.1:8000
+```powershell
+uvicorn api.main:app --reload
 ```
 
-The dashboard runs locally at:
+API docs:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+Start the dashboard:
+
+```powershell
+streamlit run dashboard/app.py
+```
+
+Dashboard:
 
 ```text
 http://127.0.0.1:8501
 ```
 
-If you have `make` installed, these shortcuts are also available:
+### Optional Makefile Commands
+
+If `make` is available:
 
 ```bash
 make install
@@ -112,82 +148,101 @@ make ingest
 make train
 make evaluate
 make seed-scores
+make test
 make api
 make dashboard
-make test
 ```
 
-### macOS / Linux
+## API Usage
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+### `GET /health`
+
+Returns service health.
+
+```json
+{
+  "status": "ok",
+  "service": "fraudops-risk-monitoring"
+}
 ```
 
----
+### `POST /score_transaction`
 
-## Run the starter ingestion pipeline
+Scores one transaction.
 
-```bash
-python -m src.ingestion
+Example request:
+
+```json
+{
+  "transaction_id": "txn_001",
+  "user_id": "user_123",
+  "amount": 0.75,
+  "merchant_category": "online_services",
+  "transaction_time": "2026-01-15T03:24:00",
+  "location": "Toronto"
+}
 ```
 
-This uses:
+Example response:
 
-```text
-data/sample/sample_transactions.csv
+```json
+{
+  "transaction_id": "txn_001",
+  "fraud_probability": 0.87,
+  "risk_tier": "High",
+  "decision": "Manual Review"
+}
 ```
 
-It will create:
+### `POST /score_batch`
 
-```text
-data/processed/clean_transactions.csv
-fraudops.sqlite3
-```
+Scores a list of transactions and returns a list of scored results. Scored results are also written to the `scored_transactions` SQLite table when available.
 
----
+## Dashboard
 
-## Run tests
+The Streamlit dashboard includes five tabs:
 
-```bash
+- **Overview**: transaction volume, fraud rate, fraud cases, transaction value, scored transaction count, and high-risk scored count.
+- **Risk Monitoring**: scored transaction queue with filters for risk tier, decision, and scored date.
+- **Fraud Pattern Analysis**: fraud rate by hour, transaction count by hour, fraud rate by amount bucket, merchant-category fraud rates, and amount distribution by fraud status.
+- **Model Performance**: best model, precision, recall, F1, ROC-AUC, PR-AUC, confusion matrix, threshold comparison, and a plain-English precision/recall explanation.
+- **About**: project purpose, tech stack, architecture, and future improvements.
+
+Screenshot placeholders and capture instructions are in [assets/screenshots/README.md](assets/screenshots/README.md).
+
+## Testing
+
+Run:
+
+```powershell
 pytest
 ```
 
----
+Latest verification: `26 passed`.
 
-## Current status
+Coverage includes validation, ingestion, feature engineering, database setup, scored transaction storage/fetching, model training artifacts, scoring alignment, realistic scoring, API endpoints, dashboard data loaders, business metrics, and seed scoring.
 
-Completed:
+## Model Performance Note
 
-- project skeleton
-- configuration file
-- required column validation
-- transaction cleaning
-- SQLite database layer
-- sample transaction dataset
-- feature engineering starter
-- business metric calculation
-- risk-tier mapping
-- model training and evaluation
-- saved model artifacts
-- FastAPI scoring endpoint
-- scored transaction database storage
-- Streamlit dashboard
-- seed scoring command for demo rows
-- pytest tests
+Current metrics are based on starter/sample data and are intended to validate the system pipeline, not claim production-grade fraud performance. A real fraud model would need a larger representative dataset, temporal validation, threshold calibration, monitoring, and review-cost analysis.
 
-Next steps:
+## Future Improvements
 
-1. add a larger public dataset,
-2. add PostgreSQL and Docker Compose services,
-3. add model drift monitoring,
-4. add authentication,
-5. deploy the API and dashboard,
-6. add screenshots and architecture diagram.
+- PostgreSQL
+- Docker Compose services for API and dashboard
+- Larger public fraud dataset
+- Model drift monitoring
+- Authentication and role-based access
+- Cloud deployment
+- CI/CD with automated tests
+- Screenshots and architecture image export for GitHub polish
 
----
+## Resume Bullet Options
 
-## Future resume bullet
+- Built FraudOps, an end-to-end transaction risk monitoring platform using Python, SQLite, scikit-learn, XGBoost, FastAPI, and Streamlit to ingest transaction data, train fraud models, score risk in real time, and monitor business impact.
+- Developed a production-style fraud analytics workflow with data validation, feature engineering, model evaluation, threshold analysis, API scoring, SQLite persistence, dashboard visualization, and automated pytest coverage.
+- Designed fraud operations metrics around precision, recall, review burden, false positives, false negatives, and estimated prevented loss to connect model output with business decision-making.
 
-> Built FraudOps, an end-to-end transaction risk monitoring platform using Python, SQL, FastAPI, Streamlit, and XGBoost to ingest transaction data, engineer behavioral fraud features, score transactions, and visualize fraud patterns through an interactive dashboard.
+Recommended resume bullet:
+
+> Built FraudOps, an end-to-end transaction risk monitoring platform using Python, SQLite, scikit-learn, XGBoost, FastAPI, and Streamlit to ingest transaction data, train fraud models, score risk in real time, and monitor business impact.

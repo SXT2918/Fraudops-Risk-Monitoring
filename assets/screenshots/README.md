@@ -1,27 +1,35 @@
-# Screenshot Checklist
+# Screenshot Inventory
 
-Add screenshots here before publishing the GitHub portfolio project.
+These screenshots are used by the main project README.
 
-Recommended captures:
+| File | View |
+| --- | --- |
+| `swagger-docs.png` | FastAPI Swagger docs showing `/health`, `/score_transaction`, and `/score_batch` |
+| `streamlit-overview.png` | Streamlit Overview tab with portfolio health KPIs |
+| `streamlit-risk-monitoring.png` | Streamlit Risk Monitoring tab with scored transaction queue |
+| `streamlit-fraud-pattern-analysis.png` | Streamlit Fraud Pattern Analysis tab with fraud charts |
+| `streamlit-model-performance.png` | Streamlit Model Performance tab with metrics and threshold comparison |
+| `streamlit-about.png` | Streamlit About tab with project purpose, stack, and architecture summary |
 
-1. `swagger-docs.png`
-   - Start the API with `uvicorn api.main:app --reload`.
-   - Open `http://127.0.0.1:8000/docs`.
-   - Capture the Swagger UI showing `/health`, `/score_transaction`, and `/score_batch`.
+To refresh screenshots locally:
 
-2. `streamlit-overview.png`
-   - Run `python -m src.seed_scores`.
-   - Start the dashboard with `streamlit run dashboard/app.py`.
-   - Capture the Overview tab with KPI metrics visible.
+```powershell
+python -m src.ingestion
+python -m src.train_model
+python -m src.evaluate_model
+python -m src.seed_scores
+uvicorn api.main:app --reload
+streamlit run dashboard/app.py
+```
 
-3. `streamlit-risk-monitoring.png`
-   - Capture the Risk Monitoring tab with seeded High / Manual Review rows visible.
+Then capture:
 
-4. `streamlit-model-performance.png`
-   - Capture the Model Performance tab with model metrics and threshold comparison visible.
+- `http://127.0.0.1:8000/docs`
+- `http://127.0.0.1:8501`
 
 Keep screenshots clean:
 
-- Use the local app URLs only.
-- Avoid showing terminal windows with personal paths if you do not want them public.
-- Crop browser chrome if needed, but keep the project title visible.
+- Use local app URLs only.
+- Avoid showing terminal windows with personal paths.
+- Keep the project title visible.
+- Crop browser chrome if needed.

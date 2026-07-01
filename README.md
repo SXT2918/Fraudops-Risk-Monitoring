@@ -208,7 +208,33 @@ The Streamlit dashboard includes five tabs:
 - **Model Performance**: best model, precision, recall, F1, ROC-AUC, PR-AUC, confusion matrix, threshold comparison, and a plain-English precision/recall explanation.
 - **About**: project purpose, tech stack, architecture, and future improvements.
 
-Screenshot placeholders and capture instructions are in [assets/screenshots/README.md](assets/screenshots/README.md).
+## Screenshots
+
+### Streamlit Overview
+
+<img src="assets/screenshots/streamlit-overview.png" alt="FraudOps Streamlit overview dashboard tab" width="900">
+
+### Risk Monitoring Queue
+
+<img src="assets/screenshots/streamlit-risk-monitoring.png" alt="FraudOps Streamlit risk monitoring scored transaction queue" width="900">
+
+### Fraud Pattern Analysis
+
+<img src="assets/screenshots/streamlit-fraud-pattern-analysis.png" alt="FraudOps Streamlit fraud pattern analysis charts" width="900">
+
+### Model Performance
+
+<img src="assets/screenshots/streamlit-model-performance.png" alt="FraudOps Streamlit model performance dashboard tab" width="900">
+
+### FastAPI Swagger Docs
+
+<img src="assets/screenshots/swagger-docs.png" alt="FraudOps FastAPI Swagger documentation" width="900">
+
+### About
+
+<img src="assets/screenshots/streamlit-about.png" alt="FraudOps Streamlit about dashboard tab" width="900">
+
+Screenshot file details and refresh notes are in [assets/screenshots/README.md](assets/screenshots/README.md).
 
 ## Testing
 
@@ -235,4 +261,4 @@ Current metrics are based on starter/sample data and are intended to validate th
 - Authentication and role-based access
 - Cloud deployment
 - CI/CD with automated tests
-- Screenshots and architecture image export for GitHub polish
+- Architecture image export for GitHub polish

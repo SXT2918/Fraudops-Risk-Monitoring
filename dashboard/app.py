@@ -31,6 +31,15 @@ uvicorn api.main:app --reload
 ```
 """
 
+AMOUNT_BUCKET_ORDER = [
+    "Under $1",
+    "$1-$10",
+    "$10-$50",
+    "$50-$100",
+    "$100-$500",
+    "$500+",
+]
+
 
 def format_currency(value: float) -> str:
     """Format a numeric value as a dollar amount."""
@@ -355,23 +364,142 @@ def build_sql_merchant_risk(transactions: pd.DataFrame, min_transactions: int = 
     ).head(10)
 
 
-def build_sql_risk_tier_distribution(scored: pd.DataFrame) -> pd.DataFrame:
-    """Build risk-tier distribution metrics from scored transactions."""
-    if scored.empty or "risk_tier" not in scored.columns:
+def build_sql_amount_bucket_analysis(transactions: pd.DataFrame) -> pd.DataFrame:
+    """Build amount-bucket fraud metrics similar to sql/03_amount_bucket_analysis.sql."""
+    if transactions.empty or not {"amount", "is_fraud"}.issubset(transactions.columns):
         return pd.DataFrame()
 
-    distribution = (
-        scored.groupby("risk_tier", dropna=False)
+    analysis = transactions.copy()
+    bins = [-0.01, 1, 10, 50, 100, 500, float("inf")]
+    analysis["amount_bucket"] = pd.cut(
+        analysis["amount"],
+        bins=bins,
+        labels=AMOUNT_BUCKET_ORDER,
+        right=False,
+    ).astype(str)
+
+    bucket_summary = (
+        analysis.groupby("amount_bucket", dropna=False, observed=False)
         .agg(
             transaction_count=("transaction_id", "count"),
-            average_fraud_probability=("fraud_probability", "mean"),
+            fraud_count=("is_fraud", "sum"),
+            fraud_rate_percent=("is_fraud", lambda values: round(float(values.mean() * 100), 2)),
+            total_amount=("amount", "sum"),
+            average_amount=("amount", "mean"),
         )
         .reset_index()
     )
-    distribution["average_fraud_probability"] = distribution["average_fraud_probability"].round(4)
-    return distribution.sort_values(
-        "risk_tier",
-        key=lambda values: values.map({"High": 1, "Medium": 2, "Low": 3}).fillna(4),
+    bucket_summary["amount_bucket"] = pd.Categorical(
+        bucket_summary["amount_bucket"],
+        categories=AMOUNT_BUCKET_ORDER,
+        ordered=True,
+    )
+    bucket_summary = bucket_summary.sort_values("amount_bucket")
+    for col in ["total_amount", "average_amount"]:
+        bucket_summary[col] = bucket_summary[col].round(2)
+    return bucket_summary
+
+
+def build_sql_threshold_review_volume(scored: pd.DataFrame) -> pd.DataFrame:
+    """Build review-volume metrics similar to sql/05_threshold_review_volume.sql."""
+    thresholds = [0.10, 0.30, 0.50, 0.70, 0.90]
+    if scored.empty or "fraud_probability" not in scored.columns:
+        return pd.DataFrame(
+            [
+                {
+                    "probability_threshold": f">= {threshold:.2f}",
+                    "scored_transaction_count": 0,
+                    "estimated_review_volume": 0,
+                    "estimated_review_rate_percent": 0.0,
+                    "high_risk_transaction_count": 0,
+                    "manual_review_count": 0,
+                    "flagged_transaction_amount": 0.0,
+                }
+                for threshold in thresholds
+            ]
+        )
+
+    analysis = scored.copy()
+    analysis["fraud_probability"] = pd.to_numeric(
+        analysis["fraud_probability"],
+        errors="coerce",
+    ).fillna(0)
+    if "amount" in analysis.columns:
+        analysis["amount"] = pd.to_numeric(analysis["amount"], errors="coerce").fillna(0)
+    else:
+        analysis["amount"] = 0.0
+
+    high_risk_count = int((analysis["risk_tier"] == "High").sum()) if "risk_tier" in analysis else 0
+    manual_review_count = (
+        int((analysis["decision"] == "Manual Review").sum()) if "decision" in analysis else 0
+    )
+    rows: list[dict[str, float | int | str]] = []
+    for threshold in thresholds:
+        flagged = analysis["fraud_probability"] >= threshold
+        review_volume = int(flagged.sum())
+        rows.append(
+            {
+                "probability_threshold": f">= {threshold:.2f}",
+                "scored_transaction_count": int(len(analysis)),
+                "estimated_review_volume": review_volume,
+                "estimated_review_rate_percent": round(
+                    100.0 * review_volume / max(len(analysis), 1),
+                    2,
+                ),
+                "high_risk_transaction_count": high_risk_count,
+                "manual_review_count": manual_review_count,
+                "flagged_transaction_amount": round(float(analysis.loc[flagged, "amount"].sum()), 2),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_sql_business_impact_summary(scored: pd.DataFrame) -> pd.DataFrame:
+    """Build business-impact proxy metrics similar to sql/07_business_impact_summary.sql."""
+    if scored.empty:
+        return pd.DataFrame(
+            [
+                {
+                    "scored_transactions": 0,
+                    "flagged_transactions": 0,
+                    "flagged_transaction_volume": 0.0,
+                    "high_risk_transaction_amount": 0.0,
+                    "estimated_prevented_loss_proxy": 0.0,
+                    "manual_review_workload": 0,
+                    "manual_review_rate_percent": 0.0,
+                }
+            ]
+        )
+
+    analysis = scored.copy()
+    if "amount" in analysis.columns:
+        analysis["amount"] = pd.to_numeric(analysis["amount"], errors="coerce").fillna(0)
+    else:
+        analysis["amount"] = 0.0
+    high_risk = analysis["risk_tier"] == "High" if "risk_tier" in analysis else pd.Series(False, index=analysis.index)
+    manual_review = (
+        analysis["decision"] == "Manual Review"
+        if "decision" in analysis
+        else pd.Series(False, index=analysis.index)
+    )
+    flagged = high_risk | manual_review
+    manual_review_count = int(manual_review.sum())
+
+    return pd.DataFrame(
+        [
+            {
+                "scored_transactions": int(len(analysis)),
+                "flagged_transactions": int(flagged.sum()),
+                "flagged_transaction_volume": round(float(analysis.loc[flagged, "amount"].sum()), 2),
+                "high_risk_transaction_amount": round(float(analysis.loc[high_risk, "amount"].sum()), 2),
+                "estimated_prevented_loss_proxy": round(float(analysis.loc[high_risk, "amount"].sum()), 2),
+                "manual_review_workload": manual_review_count,
+                "manual_review_rate_percent": round(
+                    100.0 * manual_review_count / max(len(analysis), 1),
+                    2,
+                ),
+            }
+        ]
     )
 
 
@@ -379,12 +507,14 @@ def format_sql_output_table(df: pd.DataFrame) -> pd.io.formats.style.Styler:
     """Format SQL-style output tables for readable dashboard display."""
     formatters: dict[str, str] = {}
     for column in df.columns:
+        if not pd.api.types.is_numeric_dtype(df[column]):
+            continue
         lower_column = column.lower()
         if "rate_percent" in lower_column:
             formatters[column] = "{:.1f}%"
         elif "probability" in lower_column:
             formatters[column] = "{:.3f}"
-        elif any(token in lower_column for token in ["amount", "volume"]):
+        elif any(token in lower_column for token in ["amount", "volume", "loss_proxy"]):
             formatters[column] = "${:,.2f}"
     return df.style.format(formatters, na_rep="")
 
@@ -392,7 +522,8 @@ def format_sql_output_table(df: pd.DataFrame) -> pd.io.formats.style.Styler:
 def build_sql_insight_bullets(
     merchant_risk: pd.DataFrame,
     hourly_summary: pd.DataFrame,
-    scored: pd.DataFrame,
+    amount_bucket_summary: pd.DataFrame,
+    threshold_review: pd.DataFrame,
 ) -> list[str]:
     """Create concise business-facing insights from SQL-style summaries."""
     insights: list[str] = []
@@ -422,57 +553,97 @@ def build_sql_insight_bullets(
                 f"rate reaches {format_percent_points(max_rate)} in the starter dataset."
             )
 
-    if scored.empty:
-        insights.append("No scored transactions are available yet, so scored-risk workload is not shown.")
-    else:
-        high_risk_count = int((scored["risk_tier"] == "High").sum()) if "risk_tier" in scored else 0
-        manual_review_count = (
-            int((scored["decision"] == "Manual Review").sum()) if "decision" in scored else 0
-        )
+    if not amount_bucket_summary.empty:
+        risky_buckets = amount_bucket_summary[amount_bucket_summary["transaction_count"] > 0]
+        if not risky_buckets.empty:
+            top_bucket = risky_buckets.sort_values(
+                ["fraud_rate_percent", "fraud_count", "transaction_count"],
+                ascending=[False, False, False],
+            ).iloc[0]
+            insights.append(
+                f"{top_bucket['amount_bucket']} is the highest-risk amount bucket, with "
+                f"{format_percent_points(float(top_bucket['fraud_rate_percent']))} observed "
+                f"fraud across {int(top_bucket['transaction_count']):,} transactions."
+            )
+
+    if not threshold_review.empty and threshold_review["scored_transaction_count"].sum() > 0:
+        largest_review = threshold_review.sort_values(
+            ["estimated_review_volume", "estimated_review_rate_percent"],
+            ascending=[False, False],
+        ).iloc[0]
+        smallest_review = threshold_review.sort_values(
+            ["estimated_review_volume", "estimated_review_rate_percent"],
+            ascending=[True, True],
+        ).iloc[0]
         insights.append(
-            f"Scored transactions include {high_risk_count:,} high-risk example(s) and "
-            f"{manual_review_count:,} manual-review decision(s)."
+            f"Threshold {largest_review['probability_threshold']} creates the largest review "
+            f"queue ({int(largest_review['estimated_review_volume']):,} transactions), while "
+            f"{smallest_review['probability_threshold']} creates the smallest "
+            f"({int(smallest_review['estimated_review_volume']):,})."
         )
 
+    insights.append(
+        "Sample data validates the SQL analytics workflow; it should not be interpreted as "
+        "production fraud behavior."
+    )
     return insights
 
 
-def render_sql_kpi_cards(kpi_summary: pd.DataFrame, scored: pd.DataFrame) -> None:
-    """Render top-line SQL analytics metrics."""
-    if kpi_summary.empty:
-        return
+def render_sql_summary_strip(
+    merchant_risk: pd.DataFrame,
+    amount_bucket_summary: pd.DataFrame,
+    threshold_review: pd.DataFrame,
+    business_impact: pd.DataFrame,
+) -> None:
+    """Render compact SQL-specific summary metrics without duplicating Overview."""
+    top_merchant = "n/a"
+    if not merchant_risk.empty:
+        merchant = merchant_risk.iloc[0]
+        top_merchant = (
+            f"{merchant['merchant_category']} "
+            f"({format_percent_points(float(merchant['fraud_rate_percent']))})"
+        )
 
-    kpi_row = kpi_summary.iloc[0]
-    high_risk_scored = None
-    if not scored.empty and "risk_tier" in scored:
-        high_risk_scored = int((scored["risk_tier"] == "High").sum())
+    top_bucket = "n/a"
+    if not amount_bucket_summary.empty:
+        bucket_candidates = amount_bucket_summary[amount_bucket_summary["transaction_count"] > 0]
+        if not bucket_candidates.empty:
+            bucket = bucket_candidates.sort_values(
+                ["fraud_rate_percent", "fraud_count", "transaction_count"],
+                ascending=[False, False, False],
+            ).iloc[0]
+            top_bucket = (
+                f"{bucket['amount_bucket']} "
+                f"({format_percent_points(float(bucket['fraud_rate_percent']))})"
+            )
 
-    metric_cols = st.columns(5)
-    metric_cols[0].metric("Total transactions", f"{int(kpi_row['total_transactions']):,}")
-    metric_cols[1].metric("Fraud rate", format_percent_points(float(kpi_row["fraud_rate_percent"])))
-    metric_cols[2].metric(
-        "Fraud transaction volume",
-        format_currency(float(kpi_row["fraud_transaction_volume"])),
-    )
-    metric_cols[3].metric(
-        "Average transaction amount",
-        format_currency(float(kpi_row["average_transaction_amount"])),
-    )
-    metric_cols[4].metric(
-        "Scored high-risk transactions",
-        f"{high_risk_scored:,}" if high_risk_scored is not None else "n/a",
-    )
+    review_volume = "n/a"
+    if not threshold_review.empty and threshold_review["scored_transaction_count"].sum() > 0:
+        threshold_row = threshold_review[threshold_review["probability_threshold"] == ">= 0.70"]
+        if not threshold_row.empty:
+            review_volume = f"{int(threshold_row.iloc[0]['estimated_review_volume']):,}"
+
+    loss_proxy = "n/a"
+    if not business_impact.empty:
+        loss_proxy = format_currency(float(business_impact.iloc[0]["estimated_prevented_loss_proxy"]))
+
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("Highest-risk merchant", top_merchant)
+    metric_cols[1].metric("Highest-risk amount bucket", top_bucket)
+    metric_cols[2].metric("Reviews at 0.70 threshold", review_volume)
+    metric_cols[3].metric("Prevented-loss proxy", loss_proxy)
 
 
 def render_sql_insight_charts(
     merchant_risk: pd.DataFrame,
     hourly_summary: pd.DataFrame,
-    risk_tier_distribution: pd.DataFrame,
+    amount_bucket_summary: pd.DataFrame,
+    threshold_review: pd.DataFrame,
 ) -> None:
-    """Render SQL Insights charts before detailed output tables."""
-    chart_cols = st.columns(2)
+    """Render SQL pattern and workload charts before detailed output tables."""
+    first_row = st.columns(2)
 
-    with chart_cols[0]:
+    with first_row[0]:
         if merchant_risk.empty:
             st.info("Merchant risk analysis is unavailable until transaction data is loaded.")
         else:
@@ -495,7 +666,7 @@ def render_sql_insight_charts(
             fig.update_layout(xaxis_ticksuffix="%", yaxis_title="", margin=dict(l=10, r=30))
             st.plotly_chart(fig, width="stretch")
 
-    with chart_cols[1]:
+    with first_row[1]:
         if hourly_summary.empty:
             st.info("Hourly fraud analysis is unavailable until transaction data is loaded.")
         else:
@@ -517,30 +688,55 @@ def render_sql_insight_charts(
             )
             st.plotly_chart(fig, width="stretch")
 
-    if risk_tier_distribution.empty:
-        st.info("Scored risk-tier distribution is unavailable until scored transactions exist.")
-    else:
-        fig = px.bar(
-            risk_tier_distribution,
-            x="risk_tier",
-            y="transaction_count",
-            color="risk_tier",
-            text="transaction_count",
-            title="Scored Transaction Count by Risk Tier",
-            labels={"risk_tier": "Risk tier", "transaction_count": "Transaction count"},
-            color_discrete_map={"Low": "#2ca02c", "Medium": "#ffbf00", "High": "#d62728"},
-            category_orders={"risk_tier": ["High", "Medium", "Low"]},
-        )
-        fig.update_traces(texttemplate="%{text:,}", textposition="outside")
-        fig.update_layout(showlegend=False, yaxis_title="Transactions", margin=dict(l=10, r=20))
-        st.plotly_chart(fig, width="stretch")
+    second_row = st.columns(2)
+    with second_row[0]:
+        if amount_bucket_summary.empty:
+            st.info("Amount bucket analysis is unavailable until transaction data is loaded.")
+        else:
+            fig = px.bar(
+                amount_bucket_summary,
+                x="amount_bucket",
+                y="fraud_rate_percent",
+                color="fraud_count",
+                text="fraud_rate_percent",
+                title="Fraud Rate by Amount Bucket",
+                labels={
+                    "amount_bucket": "Amount bucket",
+                    "fraud_rate_percent": "Fraud rate",
+                    "fraud_count": "Fraud count",
+                },
+            )
+            fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+            fig.update_layout(xaxis_title="", yaxis_ticksuffix="%", margin=dict(l=10, r=20))
+            st.plotly_chart(fig, width="stretch")
+
+    with second_row[1]:
+        if threshold_review.empty or threshold_review["scored_transaction_count"].sum() == 0:
+            st.info("Threshold review-volume analysis is unavailable until scored transactions exist.")
+        else:
+            fig = px.bar(
+                threshold_review,
+                x="probability_threshold",
+                y="estimated_review_volume",
+                text="estimated_review_volume",
+                title="Estimated Review Volume by Threshold",
+                labels={
+                    "probability_threshold": "Probability threshold",
+                    "estimated_review_volume": "Review volume",
+                },
+            )
+            fig.update_traces(texttemplate="%{text:,}", textposition="outside")
+            fig.update_layout(xaxis_title="", yaxis_title="Transactions", margin=dict(l=10, r=20))
+            st.plotly_chart(fig, width="stretch")
 
 
 def render_detailed_sql_outputs(
     kpi_summary: pd.DataFrame,
     merchant_risk: pd.DataFrame,
     hourly_summary: pd.DataFrame,
-    risk_tier_distribution: pd.DataFrame,
+    amount_bucket_summary: pd.DataFrame,
+    threshold_review: pd.DataFrame,
+    business_impact: pd.DataFrame,
 ) -> None:
     """Render detailed SQL output tables below dashboard charts."""
     st.markdown("### Detailed SQL Outputs")
@@ -549,7 +745,9 @@ def render_detailed_sql_outputs(
             "Fraud KPIs",
             "Merchant Risk",
             "Hourly Fraud",
-            "Risk Tiers",
+            "Amount Buckets",
+            "Threshold Review Volume",
+            "Business Impact Summary",
         ]
     )
 
@@ -560,18 +758,15 @@ def render_detailed_sql_outputs(
     with detail_tabs[2]:
         st.dataframe(format_sql_output_table(hourly_summary), width="stretch", hide_index=True)
     with detail_tabs[3]:
-        if risk_tier_distribution.empty:
-            st.info("No scored transactions are available yet.")
-        else:
-            st.dataframe(
-                format_sql_output_table(risk_tier_distribution),
-                width="stretch",
-                hide_index=True,
-            )
+        st.dataframe(format_sql_output_table(amount_bucket_summary), width="stretch", hide_index=True)
+    with detail_tabs[4]:
+        st.dataframe(format_sql_output_table(threshold_review), width="stretch", hide_index=True)
+    with detail_tabs[5]:
+        st.dataframe(format_sql_output_table(business_impact), width="stretch", hide_index=True)
 
 
 def render_sql_insights(transactions: pd.DataFrame, scored: pd.DataFrame) -> None:
-    """Render compact SQL analytics summaries in the dashboard."""
+    """Render SQL-driven analytics summaries in the dashboard."""
     st.subheader("SQL Insights")
     st.info(
         "Current SQL outputs use a small starter dataset designed to validate the analytics "
@@ -586,20 +781,39 @@ def render_sql_insights(transactions: pd.DataFrame, scored: pd.DataFrame) -> Non
     kpi_summary = build_sql_kpi_summary(transactions)
     merchant_risk = build_sql_merchant_risk(transactions)
     hourly_summary = build_sql_hourly_summary(transactions)
-    risk_tier_distribution = build_sql_risk_tier_distribution(scored)
+    amount_bucket_summary = build_sql_amount_bucket_analysis(transactions)
+    threshold_review = build_sql_threshold_review_volume(scored)
+    business_impact = build_sql_business_impact_summary(scored)
 
-    render_sql_kpi_cards(kpi_summary, scored)
+    render_sql_summary_strip(
+        merchant_risk,
+        amount_bucket_summary,
+        threshold_review,
+        business_impact,
+    )
 
     st.markdown("### Key SQL Insights")
-    for insight in build_sql_insight_bullets(merchant_risk, hourly_summary, scored):
+    for insight in build_sql_insight_bullets(
+        merchant_risk,
+        hourly_summary,
+        amount_bucket_summary,
+        threshold_review,
+    ):
         st.markdown(f"- {insight}")
 
-    render_sql_insight_charts(merchant_risk, hourly_summary, risk_tier_distribution)
+    render_sql_insight_charts(
+        merchant_risk,
+        hourly_summary,
+        amount_bucket_summary,
+        threshold_review,
+    )
     render_detailed_sql_outputs(
         kpi_summary,
         merchant_risk,
         hourly_summary,
-        risk_tier_distribution,
+        amount_bucket_summary,
+        threshold_review,
+        business_impact,
     )
 
 

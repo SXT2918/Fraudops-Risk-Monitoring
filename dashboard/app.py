@@ -262,6 +262,140 @@ def fraud_rate_by_group(df: pd.DataFrame, group_col: str) -> pd.DataFrame:
     )
 
 
+def build_sql_kpi_summary(transactions: pd.DataFrame) -> pd.DataFrame:
+    """Build a SQL-style fraud KPI summary from cleaned transactions."""
+    if transactions.empty or not {"amount", "is_fraud"}.issubset(transactions.columns):
+        return pd.DataFrame()
+
+    fraud_mask = transactions["is_fraud"] == 1
+    return pd.DataFrame(
+        [
+            {
+                "total_transactions": len(transactions),
+                "total_fraud_cases": int(fraud_mask.sum()),
+                "fraud_rate_percent": round(float(fraud_mask.mean() * 100), 2),
+                "total_transaction_volume": round(float(transactions["amount"].sum()), 2),
+                "average_transaction_amount": round(float(transactions["amount"].mean()), 2),
+                "fraud_transaction_volume": round(
+                    float(transactions.loc[fraud_mask, "amount"].sum()),
+                    2,
+                ),
+                "average_fraud_amount": round(
+                    float(transactions.loc[fraud_mask, "amount"].mean()) if fraud_mask.any() else 0,
+                    2,
+                ),
+                "non_fraud_transaction_volume": round(
+                    float(transactions.loc[~fraud_mask, "amount"].sum()),
+                    2,
+                ),
+            }
+        ]
+    )
+
+
+def build_sql_hourly_summary(transactions: pd.DataFrame) -> pd.DataFrame:
+    """Build hourly fraud metrics similar to sql/02_hourly_fraud_patterns.sql."""
+    if transactions.empty or "transaction_time" not in transactions.columns:
+        return pd.DataFrame()
+
+    analysis = transactions.copy()
+    analysis["transaction_hour"] = pd.to_datetime(
+        analysis["transaction_time"],
+        errors="coerce",
+    ).dt.hour
+    hourly = (
+        analysis.dropna(subset=["transaction_hour"])
+        .groupby("transaction_hour", dropna=False)
+        .agg(
+            transaction_count=("transaction_id", "count"),
+            fraud_count=("is_fraud", "sum"),
+            fraud_rate_percent=("is_fraud", lambda values: round(float(values.mean() * 100), 2)),
+            total_amount=("amount", "sum"),
+            average_amount=("amount", "mean"),
+        )
+        .reset_index()
+        .sort_values("transaction_hour")
+    )
+    hourly["transaction_hour"] = hourly["transaction_hour"].astype(int)
+    hourly["total_amount"] = hourly["total_amount"].round(2)
+    hourly["average_amount"] = hourly["average_amount"].round(2)
+    return hourly
+
+
+def build_sql_merchant_risk(transactions: pd.DataFrame, min_transactions: int = 2) -> pd.DataFrame:
+    """Build merchant-category risk metrics similar to sql/04_merchant_risk_analysis.sql."""
+    if transactions.empty or "merchant_category" not in transactions.columns:
+        return pd.DataFrame()
+
+    analysis = transactions.copy()
+    analysis["fraud_amount"] = analysis["amount"].where(analysis["is_fraud"] == 1, 0)
+    merchant_risk = (
+        analysis.groupby("merchant_category", dropna=False)
+        .agg(
+            transaction_count=("transaction_id", "count"),
+            fraud_count=("is_fraud", "sum"),
+            fraud_rate_percent=("is_fraud", lambda values: round(float(values.mean() * 100), 2)),
+            total_amount=("amount", "sum"),
+            fraud_amount=("fraud_amount", "sum"),
+            average_amount=("amount", "mean"),
+        )
+        .reset_index()
+    )
+    merchant_risk = merchant_risk[merchant_risk["transaction_count"] >= min_transactions]
+    for col in ["total_amount", "fraud_amount", "average_amount"]:
+        merchant_risk[col] = merchant_risk[col].round(2)
+    return merchant_risk.sort_values(
+        ["fraud_rate_percent", "fraud_count", "transaction_count"],
+        ascending=[False, False, False],
+    ).head(10)
+
+
+def build_sql_risk_tier_distribution(scored: pd.DataFrame) -> pd.DataFrame:
+    """Build risk-tier distribution metrics from scored transactions."""
+    if scored.empty or "risk_tier" not in scored.columns:
+        return pd.DataFrame()
+
+    distribution = (
+        scored.groupby("risk_tier", dropna=False)
+        .agg(
+            transaction_count=("transaction_id", "count"),
+            average_fraud_probability=("fraud_probability", "mean"),
+        )
+        .reset_index()
+    )
+    distribution["average_fraud_probability"] = distribution["average_fraud_probability"].round(4)
+    return distribution.sort_values(
+        "risk_tier",
+        key=lambda values: values.map({"High": 1, "Medium": 2, "Low": 3}).fillna(4),
+    )
+
+
+def render_sql_insights(transactions: pd.DataFrame, scored: pd.DataFrame) -> None:
+    """Render compact SQL analytics summaries in the dashboard."""
+    st.subheader("SQL Insights")
+
+    if transactions.empty:
+        st.warning("Clean transaction data is missing.")
+        show_setup_instructions()
+    else:
+        st.markdown("**Fraud KPI Summary**")
+        st.dataframe(build_sql_kpi_summary(transactions), width="stretch", hide_index=True)
+
+        insight_cols = st.columns(2)
+        with insight_cols[0]:
+            st.markdown("**Top Merchant Risk Categories**")
+            st.dataframe(build_sql_merchant_risk(transactions), width="stretch", hide_index=True)
+        with insight_cols[1]:
+            st.markdown("**Hourly Fraud Rates**")
+            st.dataframe(build_sql_hourly_summary(transactions), width="stretch", hide_index=True)
+
+    st.markdown("**Scored Risk-Tier Distribution**")
+    if scored.empty:
+        st.info("No scored transactions are available yet.")
+    else:
+        st.dataframe(build_sql_risk_tier_distribution(scored), width="stretch", hide_index=True)
+
+
 def render_fraud_pattern_analysis(transactions: pd.DataFrame) -> None:
     """Render charts describing fraud patterns in cleaned data."""
     st.subheader("Fraud Pattern Analysis")
@@ -465,6 +599,7 @@ def main() -> None:
             "Overview",
             "Risk Monitoring",
             "Fraud Pattern Analysis",
+            "SQL Insights",
             "Model Performance",
             "About",
         ]
@@ -476,8 +611,10 @@ def main() -> None:
     with tabs[2]:
         render_fraud_pattern_analysis(transactions)
     with tabs[3]:
-        render_model_performance(metrics)
+        render_sql_insights(transactions, scored)
     with tabs[4]:
+        render_model_performance(metrics)
+    with tabs[5]:
         render_about()
 
 

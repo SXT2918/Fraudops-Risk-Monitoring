@@ -15,6 +15,16 @@ import pandas as pd
 
 from src.config import DATABASE_PATH
 
+TRANSACTION_COLUMNS = [
+    "transaction_id",
+    "user_id",
+    "amount",
+    "merchant_category",
+    "transaction_time",
+    "location",
+    "is_fraud",
+]
+
 
 def get_connection(db_path: Path = DATABASE_PATH) -> sqlite3.Connection:
     """Create a SQLite connection and ensure parent directory exists."""
@@ -22,12 +32,10 @@ def get_connection(db_path: Path = DATABASE_PATH) -> sqlite3.Connection:
     return sqlite3.connect(db_path)
 
 
-def initialize_database(db_path: Path = DATABASE_PATH) -> None:
-    """Create required database tables if they do not already exist."""
-    with get_connection(db_path) as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS transactions (
+def create_transactions_table_sql(table_name: str = "transactions") -> str:
+    """Return the CREATE TABLE statement for cleaned transactions."""
+    return f"""
+            CREATE TABLE IF NOT EXISTS {table_name} (
                 transaction_id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL,
                 amount REAL NOT NULL,
@@ -37,7 +45,51 @@ def initialize_database(db_path: Path = DATABASE_PATH) -> None:
                 is_fraud INTEGER NOT NULL
             );
             """
+
+
+def transactions_table_has_primary_key(conn: sqlite3.Connection) -> bool:
+    """Return whether transactions.transaction_id is currently a primary key."""
+    columns = conn.execute("PRAGMA table_info(transactions);").fetchall()
+    return any(column[1] == "transaction_id" and column[5] == 1 for column in columns)
+
+
+def rebuild_transactions_table(conn: sqlite3.Connection) -> None:
+    """Repair older pandas-created transactions tables that lost constraints."""
+    conn.execute("DROP TABLE IF EXISTS transactions_new;")
+    conn.execute(create_transactions_table_sql("transactions_new"))
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO transactions_new (
+            transaction_id,
+            user_id,
+            amount,
+            merchant_category,
+            transaction_time,
+            location,
+            is_fraud
         )
+        SELECT
+            CAST(transaction_id AS TEXT),
+            COALESCE(CAST(user_id AS TEXT), 'unknown'),
+            COALESCE(CAST(amount AS REAL), 0),
+            COALESCE(CAST(merchant_category AS TEXT), 'unknown'),
+            COALESCE(CAST(transaction_time AS TEXT), ''),
+            COALESCE(CAST(location AS TEXT), 'unknown'),
+            COALESCE(CAST(is_fraud AS INTEGER), 0)
+        FROM transactions
+        WHERE transaction_id IS NOT NULL;
+        """
+    )
+    conn.execute("DROP TABLE transactions;")
+    conn.execute("ALTER TABLE transactions_new RENAME TO transactions;")
+
+
+def initialize_database(db_path: Path = DATABASE_PATH) -> None:
+    """Create required database tables if they do not already exist."""
+    with get_connection(db_path) as conn:
+        conn.execute(create_transactions_table_sql())
+        if not transactions_table_has_primary_key(conn):
+            rebuild_transactions_table(conn)
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS scored_transactions (
@@ -68,7 +120,9 @@ def insert_transactions(df: pd.DataFrame, db_path: Path = DATABASE_PATH) -> int:
     records["transaction_time"] = records["transaction_time"].astype(str)
 
     with get_connection(db_path) as conn:
-        records.to_sql("transactions", conn, if_exists="replace", index=False)
+        conn.execute("DELETE FROM transactions;")
+        records[TRANSACTION_COLUMNS].to_sql("transactions", conn, if_exists="append", index=False)
+        conn.commit()
     return len(records)
 
 

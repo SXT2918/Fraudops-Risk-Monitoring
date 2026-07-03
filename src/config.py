@@ -15,6 +15,7 @@ PROCESSED_DATA_DIR = DATA_DIR / "processed"
 SAMPLE_DATA_DIR = DATA_DIR / "sample"
 MODELS_DIR = BASE_DIR / "models"
 ASSETS_DIR = BASE_DIR / "assets"
+SQL_DIR = BASE_DIR / "sql"
 
 DEFAULT_RAW_FILE = SAMPLE_DATA_DIR / "sample_transactions.csv"
 CLEAN_TRANSACTIONS_FILE = PROCESSED_DATA_DIR / "clean_transactions.csv"

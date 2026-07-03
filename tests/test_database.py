@@ -22,8 +22,11 @@ def test_initialize_database_creates_required_tables(tmp_path):
                 "SELECT name FROM sqlite_master WHERE type = 'table';"
             ).fetchall()
         }
+        transaction_columns = conn.execute("PRAGMA table_info(transactions);").fetchall()
 
     assert {"transactions", "scored_transactions"}.issubset(table_names)
+    transaction_id_column = [col for col in transaction_columns if col[1] == "transaction_id"][0]
+    assert transaction_id_column[5] == 1
 
 
 def test_insert_and_fetch_scored_transactions(tmp_path):
@@ -57,6 +60,29 @@ def test_insert_and_fetch_scored_transactions(tmp_path):
     assert set(fetched["transaction_id"]) == {"txn_1", "txn_2"}
     assert "scored_at" in fetched.columns
     assert fetched.loc[fetched["transaction_id"] == "txn_2", "risk_tier"].iloc[0] == "High"
+
+
+def test_insert_transactions_preserves_transaction_primary_key(tmp_path):
+    db_path = tmp_path / "fraudops.sqlite3"
+    transactions = pd.DataFrame(
+        {
+            "transaction_id": ["txn_1"],
+            "user_id": ["user_1"],
+            "amount": [100.0],
+            "merchant_category": ["electronics"],
+            "transaction_time": ["2026-01-01 10:00:00"],
+            "location": ["Toronto"],
+            "is_fraud": [0],
+        }
+    )
+
+    insert_transactions(transactions, db_path=db_path)
+
+    with sqlite3.connect(db_path) as conn:
+        transaction_columns = conn.execute("PRAGMA table_info(transactions);").fetchall()
+
+    transaction_id_column = [col for col in transaction_columns if col[1] == "transaction_id"][0]
+    assert transaction_id_column[5] == 1
 
 
 def test_fetch_scored_transactions_returns_empty_table_when_no_scores(tmp_path):

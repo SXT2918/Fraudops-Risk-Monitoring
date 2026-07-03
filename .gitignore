@@ -23,6 +23,7 @@ env/
 *.db
 *.sqlite
 *.sqlite3
+*.sqlite3.readonly-backup-*
 data/raw/*.csv
 !data/raw/.gitkeep
 data/processed/*.csv

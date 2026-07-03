@@ -42,6 +42,11 @@ def format_percent(value: float) -> str:
     return f"{value * 100:.1f}%"
 
 
+def format_percent_points(value: float) -> str:
+    """Format a percentage-point value for SQL output tables."""
+    return f"{value:.1f}%"
+
+
 @st.cache_data
 def load_clean_transactions() -> pd.DataFrame:
     """Load cleaned transaction data from the ingestion pipeline."""
@@ -370,30 +375,232 @@ def build_sql_risk_tier_distribution(scored: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def format_sql_output_table(df: pd.DataFrame) -> pd.io.formats.style.Styler:
+    """Format SQL-style output tables for readable dashboard display."""
+    formatters: dict[str, str] = {}
+    for column in df.columns:
+        lower_column = column.lower()
+        if "rate_percent" in lower_column:
+            formatters[column] = "{:.1f}%"
+        elif "probability" in lower_column:
+            formatters[column] = "{:.3f}"
+        elif any(token in lower_column for token in ["amount", "volume"]):
+            formatters[column] = "${:,.2f}"
+    return df.style.format(formatters, na_rep="")
+
+
+def build_sql_insight_bullets(
+    merchant_risk: pd.DataFrame,
+    hourly_summary: pd.DataFrame,
+    scored: pd.DataFrame,
+) -> list[str]:
+    """Create concise business-facing insights from SQL-style summaries."""
+    insights: list[str] = []
+
+    if not merchant_risk.empty:
+        top_merchant = merchant_risk.iloc[0]
+        insights.append(
+            f"{top_merchant['merchant_category']} has the highest observed merchant-category "
+            f"fraud rate at {format_percent_points(float(top_merchant['fraud_rate_percent']))} "
+            f"across {int(top_merchant['transaction_count']):,} transactions."
+        )
+
+    if not hourly_summary.empty:
+        elevated_hours = hourly_summary[hourly_summary["fraud_count"] > 0].copy()
+        if not elevated_hours.empty:
+            max_rate = float(elevated_hours["fraud_rate_percent"].max())
+            peak_hours = (
+                elevated_hours[elevated_hours["fraud_rate_percent"] == max_rate]
+                .sort_values("transaction_hour")["transaction_hour"]
+                .head(3)
+                .astype(int)
+                .tolist()
+            )
+            hour_labels = ", ".join(f"{hour:02d}:00" for hour in peak_hours)
+            insights.append(
+                f"Fraud is concentrated around {hour_labels}, where the observed fraud "
+                f"rate reaches {format_percent_points(max_rate)} in the starter dataset."
+            )
+
+    if scored.empty:
+        insights.append("No scored transactions are available yet, so scored-risk workload is not shown.")
+    else:
+        high_risk_count = int((scored["risk_tier"] == "High").sum()) if "risk_tier" in scored else 0
+        manual_review_count = (
+            int((scored["decision"] == "Manual Review").sum()) if "decision" in scored else 0
+        )
+        insights.append(
+            f"Scored transactions include {high_risk_count:,} high-risk example(s) and "
+            f"{manual_review_count:,} manual-review decision(s)."
+        )
+
+    return insights
+
+
+def render_sql_kpi_cards(kpi_summary: pd.DataFrame, scored: pd.DataFrame) -> None:
+    """Render top-line SQL analytics metrics."""
+    if kpi_summary.empty:
+        return
+
+    kpi_row = kpi_summary.iloc[0]
+    high_risk_scored = None
+    if not scored.empty and "risk_tier" in scored:
+        high_risk_scored = int((scored["risk_tier"] == "High").sum())
+
+    metric_cols = st.columns(5)
+    metric_cols[0].metric("Total transactions", f"{int(kpi_row['total_transactions']):,}")
+    metric_cols[1].metric("Fraud rate", format_percent_points(float(kpi_row["fraud_rate_percent"])))
+    metric_cols[2].metric(
+        "Fraud transaction volume",
+        format_currency(float(kpi_row["fraud_transaction_volume"])),
+    )
+    metric_cols[3].metric(
+        "Average transaction amount",
+        format_currency(float(kpi_row["average_transaction_amount"])),
+    )
+    metric_cols[4].metric(
+        "Scored high-risk transactions",
+        f"{high_risk_scored:,}" if high_risk_scored is not None else "n/a",
+    )
+
+
+def render_sql_insight_charts(
+    merchant_risk: pd.DataFrame,
+    hourly_summary: pd.DataFrame,
+    risk_tier_distribution: pd.DataFrame,
+) -> None:
+    """Render SQL Insights charts before detailed output tables."""
+    chart_cols = st.columns(2)
+
+    with chart_cols[0]:
+        if merchant_risk.empty:
+            st.info("Merchant risk analysis is unavailable until transaction data is loaded.")
+        else:
+            merchant_chart = merchant_risk.sort_values("fraud_rate_percent", ascending=True)
+            fig = px.bar(
+                merchant_chart,
+                x="fraud_rate_percent",
+                y="merchant_category",
+                orientation="h",
+                color="fraud_count",
+                text="fraud_rate_percent",
+                title="Top Merchant Categories by Fraud Rate",
+                labels={
+                    "fraud_rate_percent": "Fraud rate",
+                    "merchant_category": "Merchant category",
+                    "fraud_count": "Fraud count",
+                },
+            )
+            fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+            fig.update_layout(xaxis_ticksuffix="%", yaxis_title="", margin=dict(l=10, r=30))
+            st.plotly_chart(fig, width="stretch")
+
+    with chart_cols[1]:
+        if hourly_summary.empty:
+            st.info("Hourly fraud analysis is unavailable until transaction data is loaded.")
+        else:
+            fig = px.line(
+                hourly_summary,
+                x="transaction_hour",
+                y="fraud_rate_percent",
+                markers=True,
+                title="Fraud Rate by Transaction Hour",
+                labels={
+                    "transaction_hour": "Hour of day",
+                    "fraud_rate_percent": "Fraud rate",
+                },
+            )
+            fig.update_layout(
+                xaxis=dict(tickmode="linear", dtick=1),
+                yaxis_ticksuffix="%",
+                margin=dict(l=10, r=20),
+            )
+            st.plotly_chart(fig, width="stretch")
+
+    if risk_tier_distribution.empty:
+        st.info("Scored risk-tier distribution is unavailable until scored transactions exist.")
+    else:
+        fig = px.bar(
+            risk_tier_distribution,
+            x="risk_tier",
+            y="transaction_count",
+            color="risk_tier",
+            text="transaction_count",
+            title="Scored Transaction Count by Risk Tier",
+            labels={"risk_tier": "Risk tier", "transaction_count": "Transaction count"},
+            color_discrete_map={"Low": "#2ca02c", "Medium": "#ffbf00", "High": "#d62728"},
+            category_orders={"risk_tier": ["High", "Medium", "Low"]},
+        )
+        fig.update_traces(texttemplate="%{text:,}", textposition="outside")
+        fig.update_layout(showlegend=False, yaxis_title="Transactions", margin=dict(l=10, r=20))
+        st.plotly_chart(fig, width="stretch")
+
+
+def render_detailed_sql_outputs(
+    kpi_summary: pd.DataFrame,
+    merchant_risk: pd.DataFrame,
+    hourly_summary: pd.DataFrame,
+    risk_tier_distribution: pd.DataFrame,
+) -> None:
+    """Render detailed SQL output tables below dashboard charts."""
+    st.markdown("### Detailed SQL Outputs")
+    detail_tabs = st.tabs(
+        [
+            "Fraud KPIs",
+            "Merchant Risk",
+            "Hourly Fraud",
+            "Risk Tiers",
+        ]
+    )
+
+    with detail_tabs[0]:
+        st.dataframe(format_sql_output_table(kpi_summary), width="stretch", hide_index=True)
+    with detail_tabs[1]:
+        st.dataframe(format_sql_output_table(merchant_risk), width="stretch", hide_index=True)
+    with detail_tabs[2]:
+        st.dataframe(format_sql_output_table(hourly_summary), width="stretch", hide_index=True)
+    with detail_tabs[3]:
+        if risk_tier_distribution.empty:
+            st.info("No scored transactions are available yet.")
+        else:
+            st.dataframe(
+                format_sql_output_table(risk_tier_distribution),
+                width="stretch",
+                hide_index=True,
+            )
+
+
 def render_sql_insights(transactions: pd.DataFrame, scored: pd.DataFrame) -> None:
     """Render compact SQL analytics summaries in the dashboard."""
     st.subheader("SQL Insights")
+    st.info(
+        "Current SQL outputs use a small starter dataset designed to validate the analytics "
+        "workflow, not represent production fraud behavior."
+    )
 
     if transactions.empty:
         st.warning("Clean transaction data is missing.")
         show_setup_instructions()
-    else:
-        st.markdown("**Fraud KPI Summary**")
-        st.dataframe(build_sql_kpi_summary(transactions), width="stretch", hide_index=True)
+        return
 
-        insight_cols = st.columns(2)
-        with insight_cols[0]:
-            st.markdown("**Top Merchant Risk Categories**")
-            st.dataframe(build_sql_merchant_risk(transactions), width="stretch", hide_index=True)
-        with insight_cols[1]:
-            st.markdown("**Hourly Fraud Rates**")
-            st.dataframe(build_sql_hourly_summary(transactions), width="stretch", hide_index=True)
+    kpi_summary = build_sql_kpi_summary(transactions)
+    merchant_risk = build_sql_merchant_risk(transactions)
+    hourly_summary = build_sql_hourly_summary(transactions)
+    risk_tier_distribution = build_sql_risk_tier_distribution(scored)
 
-    st.markdown("**Scored Risk-Tier Distribution**")
-    if scored.empty:
-        st.info("No scored transactions are available yet.")
-    else:
-        st.dataframe(build_sql_risk_tier_distribution(scored), width="stretch", hide_index=True)
+    render_sql_kpi_cards(kpi_summary, scored)
+
+    st.markdown("### Key SQL Insights")
+    for insight in build_sql_insight_bullets(merchant_risk, hourly_summary, scored):
+        st.markdown(f"- {insight}")
+
+    render_sql_insight_charts(merchant_risk, hourly_summary, risk_tier_distribution)
+    render_detailed_sql_outputs(
+        kpi_summary,
+        merchant_risk,
+        hourly_summary,
+        risk_tier_distribution,
+    )
 
 
 def render_fraud_pattern_analysis(transactions: pd.DataFrame) -> None:

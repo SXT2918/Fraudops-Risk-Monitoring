@@ -8,6 +8,7 @@ These screenshots are used by the main project README.
 | `streamlit-overview.png` | Streamlit Overview tab with portfolio health KPIs |
 | `streamlit-risk-monitoring.png` | Streamlit Risk Monitoring tab with scored transaction queue |
 | `streamlit-fraud-pattern-analysis.png` | Streamlit Fraud Pattern Analysis tab with fraud charts |
+| `streamlit-sql-insights.png` | Streamlit SQL Insights tab with fraud KPI summary and SQL-driven charts |
 | `streamlit-model-performance.png` | Streamlit Model Performance tab with metrics and threshold comparison |
 | `streamlit-about.png` | Streamlit About tab with project purpose, stack, and architecture summary |
 

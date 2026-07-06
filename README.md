@@ -271,6 +271,10 @@ The Streamlit dashboard includes six tabs:
 
 <img src="assets/screenshots/streamlit-fraud-pattern-analysis.png" alt="FraudOps Streamlit fraud pattern analysis charts" width="900">
 
+### SQL Insights
+
+<img src="assets/screenshots/streamlit-sql-insights.png" alt="FraudOps Streamlit SQL insights dashboard tab" width="900">
+
 ### Model Performance
 
 <img src="assets/screenshots/streamlit-model-performance.png" alt="FraudOps Streamlit model performance dashboard tab" width="900">

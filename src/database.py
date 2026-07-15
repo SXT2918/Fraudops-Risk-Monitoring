@@ -29,7 +29,11 @@ TRANSACTION_COLUMNS = [
 def get_connection(db_path: Path = DATABASE_PATH) -> sqlite3.Connection:
     """Create a SQLite connection and ensure parent directory exists."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    return sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=10)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 10000")
+    conn.execute("PRAGMA journal_mode = WAL")
+    return conn
 
 
 def create_transactions_table_sql(table_name: str = "transactions") -> str:

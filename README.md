@@ -4,7 +4,7 @@ An end-to-end fraud analytics platform that ingests transaction data, trains fra
 
 ## Project Status
 
-Portfolio-ready local build with ingestion, validation, SQLite storage, feature engineering, model training/evaluation, API scoring, dashboard monitoring, seed scoring, and automated tests.
+Portfolio-ready local build with ingestion, validation, SQLite storage, feature engineering, model training/evaluation, API scoring, dashboard monitoring, seed scoring, automated tests, CI, and container verification.
 
 Current metrics are based on starter/sample data and are intended to validate the system pipeline, not claim production-grade fraud performance.
 
@@ -297,7 +297,8 @@ Run:
 pytest
 ```
 
-Latest verification: `32 passed`.
+The current test result is produced by GitHub Actions on each push and pull request.
+Run `pytest -q` locally for the exact result on your checkout.
 
 Coverage includes validation, ingestion, feature engineering, database setup, scored transaction storage/fetching, model training artifacts, scoring alignment, realistic scoring, API endpoints, dashboard data loaders, business metrics, seed scoring, SQL file inventory, SQL runner execution, and missing-database handling.
 
@@ -308,10 +309,11 @@ Current metrics are based on starter/sample data and are intended to validate th
 ## Future Improvements
 
 - PostgreSQL
-- Docker Compose services for API and dashboard
 - Larger public fraud dataset
 - Model drift monitoring
 - Authentication and role-based access
 - Cloud deployment
-- CI/CD with automated tests
 - Architecture image export for GitHub polish
+
+See [MODEL_CARD.md](MODEL_CARD.md) for intended use and limitations, and
+[SECURITY.md](SECURITY.md) before using any non-synthetic data.

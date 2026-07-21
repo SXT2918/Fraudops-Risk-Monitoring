@@ -3,7 +3,7 @@ import json
 import joblib
 import pandas as pd
 
-from src.train_model import train_models
+from src.train_model import select_best_model, split_raw_transactions, train_models
 
 
 def test_train_models_writes_model_artifacts(tmp_path):
@@ -51,3 +51,43 @@ def test_train_models_writes_model_artifacts(tmp_path):
     assert hasattr(model, "predict_proba")
     assert len(feature_columns) > 0
     assert saved_metrics["feature_count"] == len(feature_columns)
+    assert "merchant_risk_rate" not in feature_columns
+    assert "user_transaction_count" not in feature_columns
+    assert saved_metrics["validation_strategy"]["final_evaluation"].startswith("One untouched")
+    assert saved_metrics["selection_metrics"]
+    assert saved_metrics["test_metrics"]["pr_auc"] >= 0
+
+
+def test_split_raw_transactions_uses_later_rows_as_holdout_when_feasible():
+    rows = []
+    for index in range(20):
+        rows.append(
+            {
+                "transaction_id": f"txn_{index:03d}",
+                "transaction_time": f"2026-01-{index + 1:02d} 12:00:00",
+                "is_fraud": index % 2,
+            }
+        )
+    transactions = pd.DataFrame(rows)
+
+    train, test, split_info = split_raw_transactions(transactions, test_size=0.25)
+
+    assert split_info["strategy"] == "later-time holdout"
+    assert pd.to_datetime(train["transaction_time"]).max() < pd.to_datetime(
+        test["transaction_time"]
+    ).min()
+
+
+def test_select_best_model_uses_cross_validation_not_holdout_results():
+    selection_metrics = {
+        "cv_winner": {
+            "cv_pr_auc_mean": 0.82,
+            "out_of_fold": {"recall": 0.7, "precision": 0.6, "f1": 0.65},
+        },
+        "other_model": {
+            "cv_pr_auc_mean": 0.79,
+            "out_of_fold": {"recall": 0.9, "precision": 0.9, "f1": 0.9},
+        },
+    }
+
+    assert select_best_model(selection_metrics) == "cv_winner"

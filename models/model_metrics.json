@@ -1,62 +1,102 @@
 {
   "best_model": "logistic_regression",
-  "selection_rule": "Highest PR-AUC, then recall, precision, and F1.",
+  "selection_rule": "Highest mean PR-AUC in stratified cross-validation on the training partition; ties use out-of-fold recall, precision, then F1.",
+  "validation_strategy": {
+    "model_selection": "Stratified cross-validation on training rows only",
+    "final_evaluation": "One untouched holdout evaluated after model selection",
+    "holdout_split": {
+      "strategy": "later-time holdout",
+      "fallback_reason": null,
+      "train_time_min": "2026-01-01T03:24:00",
+      "train_time_max": "2026-01-07T02:12:00",
+      "test_time_min": "2026-01-07T02:20:00",
+      "test_time_max": "2026-01-09T18:15:00"
+    }
+  },
   "evaluation_threshold": 0.5,
   "test_size": 0.3,
   "random_state": 42,
   "train_rows": 21,
   "test_rows": 9,
-  "feature_count": 28,
+  "feature_count": 25,
   "test_transaction_ids": [
-    "txn_0019",
-    "txn_0018",
-    "txn_0004",
-    "txn_0011",
-    "txn_0013",
-    "txn_0014",
-    "txn_0012",
+    "txn_0023",
     "txn_0021",
-    "txn_0025"
+    "txn_0024",
+    "txn_0025",
+    "txn_0026",
+    "txn_0027",
+    "txn_0028",
+    "txn_0029",
+    "txn_0030"
   ],
-  "models": {
+  "selection_metrics": {
     "logistic_regression": {
-      "precision": 1.0,
-      "recall": 1.0,
-      "f1": 1.0,
-      "roc_auc": 1.0,
-      "pr_auc": 1.0,
-      "confusion_matrix": {
-        "true_negatives": 5,
-        "false_positives": 0,
-        "false_negatives": 0,
-        "true_positives": 4
+      "cv_folds": 5,
+      "cv_pr_auc_mean": 1.0,
+      "cv_pr_auc_std": 0.0,
+      "out_of_fold": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "roc_auc": 1.0,
+        "pr_auc": 1.0,
+        "confusion_matrix": {
+          "true_negatives": 12,
+          "false_positives": 0,
+          "false_negatives": 0,
+          "true_positives": 9
+        }
       }
     },
     "random_forest": {
-      "precision": 1.0,
-      "recall": 1.0,
-      "f1": 1.0,
-      "roc_auc": 1.0,
-      "pr_auc": 1.0,
-      "confusion_matrix": {
-        "true_negatives": 5,
-        "false_positives": 0,
-        "false_negatives": 0,
-        "true_positives": 4
+      "cv_folds": 5,
+      "cv_pr_auc_mean": 1.0,
+      "cv_pr_auc_std": 0.0,
+      "out_of_fold": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "roc_auc": 1.0,
+        "pr_auc": 1.0,
+        "confusion_matrix": {
+          "true_negatives": 12,
+          "false_positives": 0,
+          "false_negatives": 0,
+          "true_positives": 9
+        }
       }
     },
     "xgboost": {
-      "precision": 0.8,
-      "recall": 1.0,
-      "f1": 0.8889,
-      "roc_auc": 1.0,
-      "pr_auc": 1.0,
-      "confusion_matrix": {
-        "true_negatives": 4,
-        "false_positives": 1,
-        "false_negatives": 0,
-        "true_positives": 4
+      "cv_folds": 5,
+      "cv_pr_auc_mean": 1.0,
+      "cv_pr_auc_std": 0.0,
+      "out_of_fold": {
+        "precision": 0.9,
+        "recall": 1.0,
+        "f1": 0.9474,
+        "roc_auc": 1.0,
+        "pr_auc": 1.0,
+        "confusion_matrix": {
+          "true_negatives": 11,
+          "false_positives": 1,
+          "false_negatives": 0,
+          "true_positives": 9
+        }
       }
+    }
+  },
+  "test_metrics": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "roc_auc": 1.0,
+    "pr_auc": 1.0,
+    "confusion_matrix": {
+      "true_negatives": 6,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "true_positives": 3
     }
   }
 }

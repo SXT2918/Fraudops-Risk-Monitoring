@@ -47,6 +47,6 @@ RANDOM_STATE = 42
 TEST_SIZE = 0.30
 THRESHOLD_COMPARISON_VALUES = [0.10, 0.20, 0.30, 0.50, 0.70]
 
-# Simple assumption for business impact reporting.
-# True-positive fraud caught => prevented loss equals transaction amount.
+# Illustrative business-impact proxy only. This assumes all correctly flagged
+# fraud could be prevented; it must not be reported as realized savings.
 PREVENTED_LOSS_MULTIPLIER = 1.0

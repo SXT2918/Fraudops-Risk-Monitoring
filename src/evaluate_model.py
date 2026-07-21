@@ -57,7 +57,7 @@ def build_threshold_comparison(
                 "false_positives": business_metrics["false_alarms"],
                 "false_negatives": business_metrics["false_negatives"],
                 "flagged_transactions": business_metrics["flagged_transactions"],
-                "estimated_prevented_loss": business_metrics["estimated_prevented_loss"],
+                "detected_fraud_amount_proxy": business_metrics["estimated_prevented_loss"],
             }
         )
 
@@ -84,6 +84,7 @@ def evaluate_saved_model(
         _meta_train,
         meta_test,
         _training_feature_columns,
+        split_info,
     ) = create_train_test_split(transactions)
 
     aligned_test = align_feature_columns(x_test, feature_columns)
@@ -95,6 +96,7 @@ def evaluate_saved_model(
         "best_model": saved_metrics.get("best_model", "unknown"),
         "test_rows": int(len(x_test)),
         "feature_count": int(len(feature_columns)),
+        "holdout_split": split_info,
         "performance": performance,
     }
     return summary, threshold_table
@@ -118,7 +120,9 @@ def print_evaluation_summary(summary: dict[str, Any], threshold_table: pd.DataFr
     print(f"Test rows: {summary['test_rows']}")
     print(f"Feature count: {summary['feature_count']}")
     print("")
-    print("Model metrics at threshold 0.50")
+    print(f"Holdout split: {summary['holdout_split']['strategy']}")
+    print("")
+    print("Untouched holdout metrics at threshold 0.50")
     print(f"- Precision: {_format_metric(performance['precision'])}")
     print(f"- Recall: {_format_metric(performance['recall'])}")
     print(f"- F1: {_format_metric(performance['f1'])}")
@@ -140,7 +144,7 @@ def print_evaluation_summary(summary: dict[str, Any], threshold_table: pd.DataFr
                 "threshold": "{:.2f}".format,
                 "precision": "{:.4f}".format,
                 "recall": "{:.4f}".format,
-                "estimated_prevented_loss": "${:,.2f}".format,
+                "detected_fraud_amount_proxy": "${:,.2f}".format,
             },
         )
     )

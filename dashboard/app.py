@@ -904,10 +904,20 @@ def render_fraud_pattern_analysis(transactions: pd.DataFrame) -> None:
 
 
 def best_model_metrics(metrics: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    """Return the best model name and its metric dictionary."""
+    """Return the best model name and untouched-holdout metrics."""
     best_model = metrics.get("best_model", "")
-    model_metrics = metrics.get("models", {}).get(best_model, {})
+    model_metrics = metrics.get("test_metrics", {})
+    if not model_metrics:
+        # Backward compatibility for artifacts created before the leakage audit.
+        model_metrics = metrics.get("models", {}).get(best_model, {})
     return best_model, model_metrics
+
+
+def format_model_metric(value: Any) -> str:
+    """Format optional model metrics without turning missing values into claims."""
+    if value is None:
+        return "n/a"
+    return f"{float(value):.4f}"
 
 
 def render_model_performance(metrics: dict[str, Any]) -> None:
@@ -924,18 +934,27 @@ def render_model_performance(metrics: dict[str, Any]) -> None:
         return
 
     best_model, model_metrics = best_model_metrics(metrics)
-    st.metric("Best model", best_model or "Unknown")
+    st.metric("Best model (selected by training-only CV)", best_model or "Unknown")
+
+    validation = metrics.get("validation_strategy", {})
+    holdout = validation.get("holdout_split", {})
+    if validation:
+        st.caption(
+            f"Selection: {validation.get('model_selection', 'n/a')}. "
+            f"Final evaluation: {validation.get('final_evaluation', 'n/a')}. "
+            f"Holdout: {holdout.get('strategy', 'n/a')}."
+        )
 
     metric_cols = st.columns(5)
-    metric_cols[0].metric("Precision", f"{model_metrics.get('precision', 0):.4f}")
-    metric_cols[1].metric("Recall", f"{model_metrics.get('recall', 0):.4f}")
-    metric_cols[2].metric("F1", f"{model_metrics.get('f1', 0):.4f}")
-    metric_cols[3].metric("ROC-AUC", f"{model_metrics.get('roc_auc', 0):.4f}")
-    metric_cols[4].metric("PR-AUC", f"{model_metrics.get('pr_auc', 0):.4f}")
+    metric_cols[0].metric("Holdout precision", format_model_metric(model_metrics.get("precision")))
+    metric_cols[1].metric("Holdout recall", format_model_metric(model_metrics.get("recall")))
+    metric_cols[2].metric("Holdout F1", format_model_metric(model_metrics.get("f1")))
+    metric_cols[3].metric("Holdout ROC-AUC", format_model_metric(model_metrics.get("roc_auc")))
+    metric_cols[4].metric("Holdout PR-AUC", format_model_metric(model_metrics.get("pr_auc")))
 
     confusion = model_metrics.get("confusion_matrix", {})
     if confusion:
-        st.markdown("**Confusion matrix at evaluation threshold**")
+        st.markdown("**Untouched-holdout confusion matrix at evaluation threshold**")
         st.dataframe(
             pd.DataFrame(
                 [
@@ -964,6 +983,10 @@ def render_model_performance(metrics: dict[str, Any]) -> None:
     if not threshold_table.empty:
         st.markdown("**Threshold comparison**")
         st.dataframe(threshold_table, width="stretch", hide_index=True)
+        st.caption(
+            "Detected-fraud amount is an illustrative holdout proxy under a "
+            "100%-recovery assumption, not realized financial savings."
+        )
     else:
         st.info("Threshold comparison is unavailable until model artifacts can be loaded.")
 

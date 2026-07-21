@@ -13,7 +13,7 @@ def calculate_business_metrics(
     target_col: str = "is_fraud",
     threshold: float = 0.70,
 ) -> dict[str, float | int]:
-    """Calculate review burden and prevented-loss metrics.
+    """Calculate review burden and an illustrative preventable-loss proxy.
 
     Args:
         df: DataFrame with amount, fraud probability, and true label.
@@ -22,7 +22,9 @@ def calculate_business_metrics(
         threshold: Probability threshold used to flag transactions.
 
     Returns:
-        Dictionary of business metrics.
+        Dictionary of business metrics. ``estimated_prevented_loss`` is the
+        value of correctly flagged fraud under a simplifying 100%-recovery
+        assumption; it is not evidence of realized savings.
     """
     if df.empty:
         return {

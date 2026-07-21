@@ -12,16 +12,17 @@ Current metrics are based on starter/sample data and are intended to validate th
 
 Fraud detection is not just an accuracy problem. Real fraud datasets are usually imbalanced, meaning the model can look accurate while missing rare but costly fraud cases. Risk teams also care about false positives because every flagged transaction can create manual review burden, customer friction, and operational cost.
 
-FraudOps frames model performance around precision, recall, threshold tradeoffs, review volume, false positives, false negatives, and estimated prevented loss. This makes the project closer to a real fraud operations workflow than a notebook-only classifier.
+FraudOps frames model performance around precision, recall, threshold tradeoffs, review volume, false positives, false negatives, and an illustrative detected-fraud amount proxy. This makes the project closer to a real fraud operations workflow than a notebook-only classifier.
 
 ## Key Features
 
 - CSV ingestion and schema validation
 - SQLite data storage for clean and scored transactions
 - SQL analytics layer for fraud KPIs, merchant risk, amount-bucket risk, review volume, and business-impact summaries
-- Feature engineering for transaction time, amount, user behavior, merchant risk, and categorical signals
-- Model training and evaluation for Logistic Regression, Random Forest, and optional XGBoost
-- Threshold comparison with precision, recall, false positives, false negatives, review volume, and estimated prevented loss
+- Leakage-safe feature engineering using only information available at scoring time
+- Training-only cross-validation for Logistic Regression, Random Forest, and optional XGBoost
+- One untouched later-time holdout for final evaluation, with a documented stratified fallback for tiny datasets
+- Threshold comparison with precision, recall, false positives, false negatives, review volume, and an explicitly labeled detected-fraud amount proxy
 - FastAPI scoring endpoints for single transactions and batches
 - Streamlit dashboard for risk monitoring, fraud patterns, model performance, and project context
 - Seed scoring script to populate dashboard demo rows
@@ -254,7 +255,7 @@ The Streamlit dashboard includes six tabs:
 - **Risk Monitoring**: scored transaction queue with filters for risk tier, decision, and scored date.
 - **Fraud Pattern Analysis**: fraud rate by hour, transaction count by hour, fraud rate by amount bucket, merchant-category fraud rates, and amount distribution by fraud status.
 - **SQL Insights**: fraud KPI summary, top merchant risk categories, hourly fraud rates, and scored risk-tier distribution.
-- **Model Performance**: best model, precision, recall, F1, ROC-AUC, PR-AUC, confusion matrix, threshold comparison, and a plain-English precision/recall explanation.
+- **Model Performance**: training-only model selection, untouched-holdout precision, recall, F1, ROC-AUC, PR-AUC, confusion matrix, threshold comparison, and a plain-English precision/recall explanation.
 - **About**: project purpose, tech stack, architecture, and future improvements.
 
 ## Screenshots
@@ -297,13 +298,18 @@ Run:
 pytest
 ```
 
-Latest verification: `32 passed`.
+Latest verification: `35 passed`. The suite includes explicit leakage and temporal-split checks.
 
 Coverage includes validation, ingestion, feature engineering, database setup, scored transaction storage/fetching, model training artifacts, scoring alignment, realistic scoring, API endpoints, dashboard data loaders, business metrics, seed scoring, SQL file inventory, SQL runner execution, and missing-database handling.
 
 ## Model Performance Note
 
-Current metrics are based on starter/sample data and are intended to validate the system pipeline, not claim production-grade fraud performance. A real fraud model would need a larger representative dataset, temporal validation, threshold calibration, monitoring, and review-cost analysis.
+Current metrics are based on starter/sample data and are intended to validate the system pipeline, not claim production-grade fraud performance. Candidate models are selected using stratified cross-validation on training rows only, and the selected model is evaluated once on a later-time holdout when the data can preserve both classes. Label-derived merchant rates and full-dataset user aggregates are intentionally excluded to prevent leakage and training/scoring inconsistency. A real fraud model would still need a larger representative dataset, rolling historical features, threshold calibration, drift monitoring, and review-cost analysis.
+
+The detected-fraud amount shown in threshold comparisons is only a scenario
+proxy: it sums correctly flagged fraudulent transaction amounts under a 100%
+recovery assumption. It is not evidence of money actually saved or users
+actually protected.
 
 ## Future Improvements
 

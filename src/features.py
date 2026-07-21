@@ -1,8 +1,8 @@
-"""Feature engineering for transaction risk modeling.
+"""Leakage-safe feature engineering for transaction risk modeling.
 
-This module turns raw transaction records into model-ready columns.
-The first version uses simple, explainable fraud-risk features that are
-understandable to both technical and non-technical reviewers.
+Every model input in this module is available from the transaction being
+scored. Labels are retained only as the training target; they never influence
+the feature values.
 """
 
 from __future__ import annotations
@@ -21,50 +21,13 @@ def add_amount_bucket(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
-def add_user_behavior_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Add simple user-level aggregate behavior features.
-
-    In a real system, these would often be rolling-window features such as
-    "transactions in the past 1 hour." For the first version, we use global
-    aggregates so the project stays easy to understand and run locally.
-    """
-    result = df.copy()
-    user_stats = (
-        result.groupby("user_id")
-        .agg(
-            user_transaction_count=("transaction_id", "count"),
-            average_user_transaction_amount=("amount", "mean"),
-        )
-        .reset_index()
-    )
-    result = result.merge(user_stats, on="user_id", how="left")
-    return result
-
-
-def add_merchant_risk_rate(df: pd.DataFrame) -> pd.DataFrame:
-    """Add merchant-category fraud rate when labels are available."""
-    result = df.copy()
-    if "is_fraud" not in result.columns:
-        result["merchant_risk_rate"] = 0.0
-        return result
-
-    merchant_stats = (
-        result.groupby("merchant_category")
-        .agg(merchant_risk_rate=("is_fraud", "mean"))
-        .reset_index()
-    )
-    result = result.merge(merchant_stats, on="merchant_category", how="left")
-    result["merchant_risk_rate"] = result["merchant_risk_rate"].fillna(0.0)
-    return result
-
-
 def build_features(df: pd.DataFrame, training: bool = True) -> pd.DataFrame:
     """Build model-ready fraud-risk features.
 
     Args:
         df: Clean transaction data.
-        training: Whether labels are available. If True and is_fraud exists,
-            the output keeps the target column.
+        training: If True, preserve ``is_fraud`` as the target column. The
+            target is never used to calculate an input feature.
 
     Returns:
         DataFrame containing engineered numeric/model-ready features.
@@ -81,8 +44,6 @@ def build_features(df: pd.DataFrame, training: bool = True) -> pd.DataFrame:
     result["log_amount"] = np.log1p(result["amount"])
 
     result = add_amount_bucket(result)
-    result = add_user_behavior_features(result)
-    result = add_merchant_risk_rate(result)
 
     # One-hot encode low-cardinality categorical variables.
     categorical_cols = ["merchant_category", "location", "amount_bucket"]
